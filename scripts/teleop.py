@@ -4,8 +4,13 @@ import sys
 import termios
 import interface
 import Xlib.display as display
+from tf.transformations import euler_from_quaternion, rotation_matrix, quaternion_from_matrix
 
-win32gui.GetCursorPos(point)
+def convert_pose_to_xy_and_theta(pose):
+    """ Convert pose (geometry_msgs.Pose) to a (x,y,yaw) tuple """
+    orientation_tuple = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
+    angles = euler_from_quaternion(orientation_tuple)
+    return (pose.position.x, pose.position.y, angles[2])
 
 class TeleopC(object):
     def __init__ (self):
@@ -13,9 +18,6 @@ class TeleopC(object):
         self.myspeedctrl = interface.SendSpeed()
         self.offsetX = display.Display().screen().root.query_pointer()._data['root_x']
         self.offsetY = display.Display().screen().root.query_pointer()._data['root_y']
-
-    def getDirectionUnit(self):
-
 
     def run(self):
         while key != '\x03':
