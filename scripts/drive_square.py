@@ -1,25 +1,47 @@
 #!/usr/bin/env python
-
-from __future__ import print_function
-from geometry_msgs.msg import PointStamped, Point
-from std_msgs.msg import Header
+""" This script drives a robot in a 1m x 1m square """
 import rospy
+from geometry_msgs.msg import Twist
 
-class TestMessageNode(object):
-    """ This node publishes a message at 2 hz """
-    def __init__(self):
-        rospy.init_node("test_node")
-        self.pub = rospy.Publisher('/my_point', PointStamped, queue_size=10)
+class square_driver(object):
 
-    def run(self):
-        r = rospy.Rate(2)
-        while not rospy.is_shutdown():
-            my_header = Header(stamp=rospy.Time.now(), frame_id="odom")
-            my_point = Point(x=1.0, y=2.0, z=0.0)
-            m = PointStamped(header=my_header, point=my_point)
-            self.pub.publish(m)
-            r.sleep()
+	def __init__(self):
+		rospy.init_node('bumpty_dumpty')
+		self.publisher = rospy.Publisher('cmd_vel', Twist, queue_size = 10)
+		self.rate = rospy.Rate(10)
+		self.vel_msg = Twist()
+		self.vel_msg.linear.x = 0
+		self.vel_msg.angular.z = 0
+
+		# set parameters
+		self.time_until_turn = 3.2
+		self.time_for_turn = 1.57
+
+	def run(self):
+		while not rospy.is_shutdown():
+			self.move_straight()
+			self.turn()
+			self.rate.sleep()
+
+	def move_straight(self):
+		time_started_moving_straight = rospy.Time.now()
+		time_stop_moving_straight = time_started_moving_straight + rospy.Duration(self.time_until_turn)
+		self.vel_msg.linear.x = 1
+		self.vel_msg.angular.z = 0
+
+		while rospy.Time.now() < time_stop_moving_straight:
+			self.publisher.publish(self.vel_msg)
+
+	def turn(self):
+		time_started_turning = rospy.Time.now()
+		time_stop_turning = time_started_turning + rospy.Duration(self.time_for_turn)
+		self.vel_msg.linear.x = 0
+		self.vel_msg.angular.z = -1
+
+		while rospy.Time.now() < time_stop_turning:
+			self.publisher.publish(self.vel_msg)
+
 
 if __name__ == '__main__':
-    node = TestMessageNode()
+	node = square_driver()
     node.run()
