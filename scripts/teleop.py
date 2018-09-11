@@ -9,6 +9,7 @@ win32gui.GetCursorPos(point)
 
 class TeleopC(object):
     def __init__ (self):
+        self.settings = termios.tcgetattr(sys.stdin)
         self.myspeedctrl = interface.SendSpeed()
         self.offsetX = display.Display().screen().root.query_pointer()._data['root_x']
         self.offsetY = display.Display().screen().root.query_pointer()._data['root_y']
