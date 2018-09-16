@@ -1,8 +1,12 @@
+#!/usr/bin/env python
 import tty
 import select
 import sys
 import termios
-import interface
+import rospy
+from std_msgs.msg import Point
+from geometry_msgs.msg import Twist, Vector3, Point, PointStamped
+from nav_msgs.msg import Odometry
 import Xlib.display as display
 from tf.transformations import euler_from_quaternion, rotation_matrix, quaternion_from_matrix
 
@@ -14,13 +18,24 @@ def convert_pose_to_xy_and_theta(pose):
 
 class TeleopC(object):
     def __init__ (self):
+        rospy.init_node("teleop")
+        self.publisher_cmd_vel = rospy.Publisher("/cmd_vel", Twist, queue_size=10, latch=True)
+        self.odom_sub = rospy.Subscriber('odom', Odometry, self.getOdom)
         self.settings = termios.tcgetattr(sys.stdin)
         self.myspeedctrl = interface.SendSpeed()
         self.offsetX = display.Display().screen().root.query_pointer()._data['root_x']
         self.offsetY = display.Display().screen().root.query_pointer()._data['root_y']
+        self.velocityPublisher = rospy.Publisher('cmd_vel', Twist, queue_size=5)
+        self.rate = rospy.Rate(10)
+        self.vel = Twist()
+        self.vel_msg.linear.x = 0
+        self.vel_msg.angular.z = 0
+
+    def getOdom(self, msg):
+        self.pose = convert_pose_to_xy_and_theta(msg.pose.pose);
 
     def run(self):
-        while key != '\x03':
+        while not rospy.is_shutdown:
             self.key = self.getKey()
             if self.key == "a":
                 self.myspeedctrl.send_speed(0,1)
