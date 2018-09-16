@@ -96,15 +96,18 @@ class TeleopC(object):
     def run(self):
         while not rospy.is_shutdown():
             currMouseOffset = (mouseToXY(self.getRelativeMousePosition(getCurrentMousePosition()))[0] - self.origin[0], mouseToXY(self.getRelativeMousePosition(getCurrentMousePosition()))[1] - self.origin[1])
-            if abs(angle_diff(self.pose[2], math.atan2(currMouseOffset[1]-self.pose[1], currMouseOffset[0]-self.pose[0]))) < 0.1:
+            if abs(angle_diff(self.pose[2], math.atan2(currMouseOffset[1]-self.pose[1], currMouseOffset[0]-self.pose[0]))) < 0.05:
                 if distanceTo(currMouseOffset, (self.pose[0], self.pose[1])) > 0.1:
                     self.vel.linear.x = 1
                     self.vel.angular.z = 0
             else:
-                if math.atan2(currMouseOffset[1]-self.pose[1], currMouseOffset[0]-self.pose[0]) > 0:
-                    self.vel.angular.z = 1
+                if distanceTo(currMouseOffset, (self.pose[0], self.pose[1])) > 0.1:
+                    if math.atan2(currMouseOffset[1]-self.pose[1], currMouseOffset[0]-self.pose[0]) > 3.14:
+                        self.vel.angular.z = 1
+                    else:
+                        self.vel.angular.z = -1
                 else:
-                    self.vel.angular.z = -1
+                    self.vel.angular.z = 0
                 self.vel.linear.x = 0
 
             self.velocityPublisher.publish(self.vel)
