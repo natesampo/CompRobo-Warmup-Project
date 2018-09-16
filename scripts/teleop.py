@@ -50,12 +50,7 @@ def distanceTo(a, b):
 def mouseToXY(mousePos):
     return (mousePos[0]/1500, mousePos[1]/1500)
 
-def getCurrentMousePosition():    def get_key(self):
-		tty.setraw(sys.stdin.fileno())
-		select.select([sys.stdin], [], [], 0)
-		key = sys.stdin.read(1)
-		termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
-		return key
+def getCurrentMousePosition():
     return (display.Display().screen().root.query_pointer()._data['root_x'], display.Display().screen().root.query_pointer()._data['root_y'])
 
 def input_thread(myTeleop):
@@ -71,20 +66,18 @@ def input_thread(myTeleop):
             os.kill(os.getpid(), signal.SIGINT)
         elif key == 'a':
             myTeleop.newOrigin()
-        elif key == 'w' and myTeleop.man_toggle == False:
-            myTeleop.man_toggle = True
-        elif key == 'w' and myTeleop.man_toggle == True:
-            myTeleop.man_toggle = False
-        elif key == 'i' and myTeleop.man_toggle == True:
+        elif key == 'w':
+            myTeleop.man_toggle = not myTeleop.man_toggle
+        elif key == 'i' and myTeleop.man_toggle:
             myTeleop.vel.linear.x = 1
             myTeleop.vel.angular.z = 0
-        elif key =='k' and myTeleop.man_toggle == True:
+        elif key =='k' and myTeleop.man_toggle:
             myTeleop.vel.linear.x = -1
             myTeleop.vel.angular.z = 0
-        elif key == 'j' and myTeleop.man_toggle == True:
+        elif key == 'j' and myTeleop.man_toggle:
             myTeleop.vel.linear.x = 0
             myTeleop.vel.angular.z = -1
-        elif key == 'l' and myTeleop.man_toggle == True:
+        elif key == 'l' and myTeleop.man_toggle:
             myTeleop.vel.linear.x = 0
             myTeleop.vel.angular.z = 1
 
@@ -95,6 +88,8 @@ class TeleopC(object):
         self.odom_sub = rospy.Subscriber('odom', Odometry, self.getOdom)
         self.mouseOrigin = (display.Display().screen().root.query_pointer()._data['root_x'], display.Display().screen().root.query_pointer()._data['root_y'])
         self.velocityPublisher = rospy.Publisher('cmd_vel', Twist, queue_size=5)
+        self.angle = 0
+        self.speed = 1
         self.rate = rospy.Rate(10)
         self.vel = Twist()
         self.pose = (0, 0, 0)
@@ -110,30 +105,32 @@ class TeleopC(object):
 
     def newOrigin(self):
         self.origin = self.pose
+        #self.angle = self.pose[2]
         self.mouseOrigin = getCurrentMousePosition()
 
     def getRelativeMousePosition(self, mousePos):
-        return (mousePos[0] - self.mouseOrigin[0], mousePos[1] - self.mouseOrigin[1]))
+        return (mousePos[0] - self.mouseOrigin[0], mousePos[1] - self.mouseOrigin[1])
 
     def run(self):
         while not rospy.is_shutdown():
-            if self.man_toggle == True:
-                currMouseOffset = (mouseToXY(self.getRelativeMousePosition(getCurrentMousePosition()))[0] - self.origin[0], mouseToXY(self.getRelativeMousePosition(getCurrentMousePosition()))[1] - self.origin[1])
-                currAngleOffset = math.atan2(currMouseOffset[1]-self.pose[1], currMouseOffset[0]-self.pose[0])
+            if not self.man_toggle:
+                currMouseOffset = (mouseToXY(self.getRelativeMousePosition(getCurrentMousePosition()))[0] - (self.pose[0] - self.origin[0]), mouseToXY(self.getRelativeMousePosition(getCurrentMousePosition()))[1] - (self.pose[1] - self.origin[1]))
+                currAngleOffset = -math.atan2(currMouseOffset[1], currMouseOffset[0])-self.angle
                 if abs(angle_diff(self.pose[2], currAngleOffset)) < 0.05:
-                    if distanceTo(currMouseOffset, (self.pose[0], self.pose[1])) > 0.2:
-                        self.vel.linear.x = 1
+                    if math.sqrt((currMouseOffset[0]*currMouseOffset[0]) + (currMouseOffset[1]*currMouseOffset[1])) > 0.2:
+                        self.vel.linear.x = -self.speed*(math.sqrt((currMouseOffset[0]*currMouseOffset[0]) + (currMouseOffset[1]*currMouseOffset[1]))/2)
                         self.vel.angular.z = 0
                 else:
-                    if distanceTo(currMouseOffset, (self.pose[0], self.pose[1])) > 0.2:
-                        if currAngleOffset > 3.14:
-                            self.vel.angular.z = 1
+                    if math.sqrt((currMouseOffset[0]*currMouseOffset[0]) + (currMouseOffset[1]*currMouseOffset[1])) > 0.2:
+                        if currAngleOffset > 0:
+                            self.vel.angular.z = self.speed*(currAngleOffset/3.14)
                         else:
-                            self.vel.angular.z = -1
+                            self.vel.angular.z = -self.speed*(currAngleOffset/3.14)
                     else:
                         self.vel.angular.z = 0
                     self.vel.linear.x = 0
-            print currAngleOffset
+
+            print(currAngleOffset)
             self.velocityPublisher.publish(self.vel)
 
 if __name__ == "__main__":
