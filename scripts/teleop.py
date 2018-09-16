@@ -121,16 +121,25 @@ class TeleopC(object):
                         self.vel.linear.x = -self.speed*(math.sqrt((currMouseOffset[0]*currMouseOffset[0]) + (currMouseOffset[1]*currMouseOffset[1]))/2)
                         self.vel.angular.z = 0
                 else:
-                    if math.sqrt((currMouseOffset[0]*currMouseOffset[0]) + (currMouseOffset[1]*currMouseOffset[1])) > 0.2:
-                        if currAngleOffset > 0:
-                            self.vel.angular.z = self.speed*(currAngleOffset/3.14)
+                    if abs(angle_diff(self.pose[2], currAngleOffset)) < 0.02:
+                        if math.sqrt((currMouseOffset[0]*currMouseOffset[0]) + (currMouseOffset[1]*currMouseOffset[1])) > 0.2:
+                            if angle_diff(self.pose[2], currAngleOffset) > 0:
+                                self.vel.angular.z = -self.speed*(abs(angle_diff(self.pose[2], currAngleOffset))/1.5)
+                            else:
+                                self.vel.angular.z = self.speed*(abs(angle_diff(self.pose[2], currAngleOffset))/1.5)
                         else:
-                            self.vel.angular.z = -self.speed*(currAngleOffset/3.14)
-                    else:
-                        self.vel.angular.z = 0
-                    self.vel.linear.x = 0
+                            self.vel.angular.z = 0
+                        self.vel.linear.x = 0
+                    elif abs(angle_diff(self.pose[2], currAngleOffset)) >= 0.02:
+                        if math.sqrt((currMouseOffset[0]*currMouseOffset[0]) + (currMouseOffset[1]*currMouseOffset[1])) > 0.2:
+                            if angle_diff(self.pose[2], currAngleOffset) > 0:
+                                self.vel.angular.z = -self.speed*(abs(angle_diff(self.pose[2], currAngleOffset))/1.5)
+                            else:
+                                self.vel.angular.z = self.speed*(abs(angle_diff(self.pose[2], currAngleOffset))/1.5)
+                        else:
+                            self.vel.angular.z = 0
+                        self.vel.linear.x = 0
 
-            print(currAngleOffset)
             self.velocityPublisher.publish(self.vel)
 
 if __name__ == "__main__":
