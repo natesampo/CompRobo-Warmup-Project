@@ -1,4 +1,3 @@
-#drive in a square of 1 m by 1 m
 #!/usr/bin/env python
 from __future__ import division
 import tty
