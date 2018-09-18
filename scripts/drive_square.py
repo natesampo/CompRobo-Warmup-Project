@@ -89,7 +89,7 @@ class driveSquare(object):
         rospy.init_node("square", disable_signals=True)
         self.odom_sub = rospy.Subscriber('odom', Odometry, self.getOdom)
         self.velocityPublisher = rospy.Publisher('cmd_vel', Twist, queue_size=5)
-        self.targetAngle = 1.57
+        self.targetAngle = -1.57
         self.moving = True
         self.angle = 0
         self.speed = 0.5
@@ -115,19 +115,20 @@ class driveSquare(object):
         return (self.pose[0] - self.origin[0], self.pose[1] - self.origin[1])
 
     def getRelativeAngle(self):
-        return abs(self.pose[2] - self.origin[2]) - 3.14
+        return angle_diff(self.pose[2], self.origin[2])
 
     def run(self):
         while not rospy.is_shutdown():
             if not self.man_toggle:
-                if not self.moving and self.getRelativeAngle() < self.targetAngle + 0.7 and self.getRelativeAngle() > self.targetAngle - 0.7: # not turning
+                print self.getRelativeAngle()
+                if not self.moving and self.getRelativeAngle() < self.targetAngle + 0.1 and self.getRelativeAngle() > self.targetAngle - 0.1: # not turning
                     self.moving = True
-                    self.targetAngle = 1.57
+                    #self.targetAngle += 3.14
                 else: # turn baby turn disco inferno
                     self.vel.linear.x = 0
                     self.vel.angular.z = -min(abs(max(self.speed*(abs(self.targetAngle-self.getRelativeAngle())), 0.2)), self.topSpeed)
 
-                if abs(self.getRelativePosition()[0]) <= 0.1: # you are not there yet
+                if abs(self.getRelativePosition()[0]) <= 1: # you are not there yet
                     if self.moving:
                         self.vel.linear.x = self.speed#*((1.5-(self.pose[0]+self.pose[1])/2))
                         self.vel.angular.z = 0
