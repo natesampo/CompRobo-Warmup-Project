@@ -87,12 +87,13 @@ def input_thread(driveSquare):
 class driveSquare(object):
     def __init__ (self):
         rospy.init_node("square", disable_signals=True)
-        self.publisher_cmd_vel = rospy.Publisher("/cmd_vel", Twist, queue_size=10, latch=True)
         self.odom_sub = rospy.Subscriber('odom', Odometry, self.getOdom)
-        self.mouseOrigin = (display.Display().screen().root.query_pointer()._data['root_x'], display.Display().screen().root.query_pointer()._data['root_y'])
         self.velocityPublisher = rospy.Publisher('cmd_vel', Twist, queue_size=5)
+        self.targetAngle = 1.57
+        self.moving = True
         self.angle = 0
-        self.speed = 1
+        self.speed = 0.5
+        self.topSpeed = 0.7
         self.rate = rospy.Rate(10)
         self.vel = Twist()
         self.pose = (0, 0, 0)
@@ -108,27 +109,34 @@ class driveSquare(object):
 
     def newOrigin(self):
         self.origin = self.pose
-        #self.angle = self.pose[2]
         self.mouseOrigin = getCurrentMousePosition()
 
-    def getRelativeMousePosition(self, mousePos):
-        return (mousePos[0] - self.mouseOrigin[0], mousePos[1] - self.mouseOrigin[1])
+    def getRelativePosition(self):
+        return (self.pose[0] - self.origin[0], self.pose[1] - self.origin[1])
+
+    def getRelativeAngle(self):
+        return abs(self.pose[2] - self.origin[2]) - 3.14
 
     def run(self):
         while not rospy.is_shutdown():
             if not self.man_toggle:
-                if abs(self.pose[2]) < 0.05: # not turning
-                    if (self.pose[0]+self.pose[1])/2 <= 0.95: # you are not there yet
-                        self.vel.linear.x = self.speed*((1.5-(self.pose[0]+self.pose[1])/2))
-                        self.vel.angular.z = 0
-                    else : # you are
-                        self.vel.linear.x = 0
-                        self.vel.angular.z = 0
-                        self.newOrigin()
+                if not self.moving and self.getRelativeAngle() < self.targetAngle + 0.7 and self.getRelativeAngle() > self.targetAngle - 0.7: # not turning
+                    self.moving = True
+                    self.targetAngle = 1.57
                 else: # turn baby turn disco inferno
                     self.vel.linear.x = 0
-                    self.vel.angular.z = self.speed*(abs(self.pose[2]))
-            print(self.pose[2])
+                    self.vel.angular.z = -min(abs(max(self.speed*(abs(self.targetAngle-self.getRelativeAngle())), 0.2)), self.topSpeed)
+
+                if abs(self.getRelativePosition()[0]) <= 0.1: # you are not there yet
+                    if self.moving:
+                        self.vel.linear.x = self.speed#*((1.5-(self.pose[0]+self.pose[1])/2))
+                        self.vel.angular.z = 0
+                else: # you are
+                    self.vel.linear.x = 0
+                    self.vel.angular.z = 0
+                    self.newOrigin()
+                    self.moving = False
+
             self.velocityPublisher.publish(self.vel)
 
 if __name__ == "__main__":
