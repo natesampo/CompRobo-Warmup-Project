@@ -1,4 +1,3 @@
-#drive in a square of 1 m by 1 m
 #!/usr/bin/env python
 from __future__ import division
 import tty
@@ -15,6 +14,10 @@ from geometry_msgs.msg import Twist, Vector3, Point, PointStamped
 from nav_msgs.msg import Odometry
 import Xlib.display as display
 from tf.transformations import euler_from_quaternion, rotation_matrix, quaternion_from_matrix
+import csv
+
+#This file helps tune a PID loop for the Neato using the ziegler nicols method
+
 
 def convert_pose_to_xy_and_theta(pose):
     """ Convert pose (geometry_msgs.Pose) to a (x,y,yaw) tuple """
@@ -44,7 +47,6 @@ def angle_diff(a, b):
         return d1
     else:
         return d2
-
 def distanceTo(a, b):
     return math.sqrt((a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]))
 
@@ -54,7 +56,7 @@ def mouseToXY(mousePos):
 def getCurrentMousePosition():
     return (display.Display().screen().root.query_pointer()._data['root_x'], display.Display().screen().root.query_pointer()._data['root_y'])
 
-def input_thread(driveSquare):
+def input_thread(PID_Test):
     running = True
     while running:
         '''Given code to grab keyboard values'''
@@ -66,26 +68,36 @@ def input_thread(driveSquare):
             running = False
             os.kill(os.getpid(), signal.SIGINT)
         elif key == 'a':
-            driveSquare.newOrigin()
+            PID_Test.newOrigin()
         elif key == 'w':
-            driveSquare.man_toggle = not driveSquare.man_toggle
-        elif key == 'i' and driveSquare.man_toggle:
-            driveSquare.vel.linear.x = 1
-            driveSquare.vel.angular.z = 0
-        elif key =='k' and driveSquare.man_toggle:
-            driveSquare.vel.linear.x = -1
-            driveSquare.vel.angular.z = 0
-        elif key == 'j' and driveSquare.man_toggle:
-            driveSquare.vel.linear.x = 0
-            driveSquare.vel.angular.z = -1
-        elif key == 'l' and driveSquare.man_toggle:
-            driveSquare.vel.linear.x = 0
-            driveSquare.vel.angular.z = 1
+            PID_Test.man_toggle = not PID_Test.man_toggle
+        elif key == 'i' and PID_Test.man_toggle:
+            PID_Test.vel.linear.x = 1
+            PID_Test.vel.angular.z = 0
+        elif key =='k' and PID_Test.man_toggle:
+            PID_Test.vel.linear.x = -1
+    def print_to_csv(PID_Test):
+    #takes the pid_test and makes a file for the
+    if PID_Test.test_active: #creating a time stamped csv to store data.
+                PID_Test.vel.angular.z = 0
+        elif key == 'j' and PID_Test.man_toggle:
+            PID_Test.vel.linear.x = 0
+            PID_Test.vel.angular.z = -1
+        elif key == 'l' and PID_Test.man_toggle:
+            PID_Test.vel.linear.x = 0
+            PID_Test.vel.angular.z = 1
         elif key == 's':
-            driveSquare.vel.linear.x = 0
-            driveSquare.vel.angular.z = 0
+            PID_Test.vel.linear.x = 0
+            PID_Test.vel.angular.z = 0
+        elif key == 'b' and PID_Test.mantoggle:
+            #starts and ends the pid test.
+            PID_Test.test_active = not PID_Test.test_active
+            PID_Test.test_num +=1
 
-class driveSquare(object):
+
+
+
+class test_pid(object):
     def __init__ (self):
         rospy.init_node("square", disable_signals=True)
         self.publisher_cmd_vel = rospy.Publisher("/cmd_vel", Twist, queue_size=10, latch=True)
@@ -100,6 +112,20 @@ class driveSquare(object):
         self.origin = self.pose
         self.getNewOrigin = True
         self.man_toggle = False
+        self.test_lin = True
+        self.Kp_ang = 1 #propostional Angular constant
+        self.Ki_ang = 0 # intergral Angular constant
+        self.Kd_ang = 0 # derivative Angular constant
+        self.Kp_lin = 1 #proportional Linear constant
+        self.Ki_lin = 0 #intergral Linear constant
+        self.Kd_lin = 0 #derivative Linear Constant
+        self.test_active = False
+        self.test_num = 0
+        self.test_list = []
+        self.error_lin = 0
+        self.error_ang = 0
+        self.real_x  = self.pose[0]
+        self.real_z = self.pose[2]
 
     def getOdom(self, msg):
         self.pose = convert_pose_to_xy_and_theta(msg.pose.pose)
@@ -107,37 +133,47 @@ class driveSquare(object):
             self.newOrigin()
             self.getNewOrigin = False
 
-    def newOrigin(self):
+    def newOrigin(self):self.error_lin = self.pose[0]-self.origin[0]
         self.origin = self.pose
         #self.angle = self.pose[2]
-        self.mouseOrigin = getCurrentMousePosition()
+        #self.mouseOrigin = getCurrentMousePosition()
 
-    def getRelativeMousePosition(self, mousePos):
-        return (mousePos[0] - self.mouseOrigin[0], mousePos[1] - self.mouseOrigin[1])
+    def Store_val(self):
+        #this function saves the current pos and stuff to a text_fileself.
+        #rewrite old file and add things to the list.
+        test = ""
+        with open("PID_TEST.csv", 'a') as csv_file:
+            csv_writer = csv.writer(csv_file)
+            if self.test_lin:
+                test = "linear"
+            else:
+                test = "angular"
+            csv_writer.writerow([self.test_num,test,rospy.Time.now(),self.Pose[0]-self.origin[0], self.Pose[1]-self.origin[1], self.Pose[2]-self.origin[2]])
+            #each row has test_num, test_type, time, X position, y position, z position
 
+    self.time_start_test = 0
     def run(self):
         while not rospy.is_shutdown():
-            if not self.man_toggle:
-                if abs(angle_diff(self.pose[2],1.5708)) < 0.05: # not turning
-                    if average(self.pos[0],self.pos[1]) <= 0.95: # you are not there yet
-                        self.vel.linear.x = self.speed*((1.5-average(self.pos[0],self.pos[1])))
-                        self.vel.angular.z = 0
-                    else : # you ared
-                        self.vel.linear.x = 0
-                        self.vel.angular.z = 0
-                        self.newOrigin()
-                else: # turn baby turn disco inferno
-                    self.vel.linear.x = 0
-                    self.vel.angular.z = self.speed*(angle_diff(self.pose[2],1.5708)+0.1)
-            self.velocityPublisher.publish(self.vel)
+            if not self.man_toggle and self.test_active:
+                self.real_x = self.Pose[0]-self.origin[0]
+                self.real_z = self.Pose[2]-self.origin[2]
+                if not self.test_lin: # testing Angular
 
+                else: # testing lin target = 1 m
+                    self.error_lin
+                    if self.error_lin != 1: #go forward
+                        self.linear
+                        self.vel.linear.x = self.speed*((self.Kp_lin*(1-self.pose[0]+self.origin)[0])+(self.Ki_lin*(1-self.pose[0]+self.origin[0]))+(self.Kd_lin*(1-self.pose[0]+self.origin[0])))
+                        self.vel.angular.z = 0
+            #print(self.pose[2])
+            self.velocityPublisher.publish(self.vel)
 if __name__ == "__main__":
     settings = termios.tcgetattr(sys.stdin)
-    driveSquare = TeleopC()
-    thread.start_new_thread(input_thread, (driveSquare, ))
+    PID_Test = PID_Test()
+    thread.start_new_thread(input_thread, (PID_Test, ))
     try:
-        driveSquare.run()
+        PID_Test.run()
     except KeyboardInterrupt:
-        driveSquare.vel.linear.x = 0
-        driveSquare.vel.angular.z = 0
-        driveSquare.velocityPublisher.publish(driveSquare.vel)
+        PID_Test.vel.linear.x = 0
+        PID_Test.vel.angular.z = 0
+        PID_Test.velocityPublisher.publish(PID_Test.vel)
