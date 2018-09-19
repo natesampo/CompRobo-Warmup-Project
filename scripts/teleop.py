@@ -110,7 +110,6 @@ class TeleopC(object):
 
     def newOrigin(self):
         self.origin = self.pose
-        #self.angle = self.pose[2]
         self.mouseOrigin = getCurrentMousePosition()
 
     def getRelativeMousePosition(self, mousePos):

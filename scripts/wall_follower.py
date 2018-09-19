@@ -77,18 +77,17 @@ class wallFollower(object):
         self.vel = Twist()
         self.pose = (0, 0, 0)
         self.scan = []
-        self.maxWallDistance = 0.5
+        self.maxWallDistance = 0.3
 
     def getOdom(self, msg):
         self.pose = convert_pose_to_xy_and_theta(msg.pose.pose)
 
     def getScan(self, msg):
-        print('scan')
         self.scan = msg.ranges
 
     def convertToXY(self, angle, r):
-        newX = math.cos(self.pose[2] + angle)*r
-        newY = math.sin(self.pose[2] + angle)*r
+        newX = math.cos(self.pose[2] + math.radians(angle))*r
+        newY = math.sin(self.pose[2] + math.radians(angle))*r
         return (newX, newY)
 
     def run(self):
@@ -97,24 +96,30 @@ class wallFollower(object):
             walls = []
             largestWall = []
             largestWallLength = 0
+            wallStartIndices = []
+            largestWallIndex = 0
             if len(self.scan) > 0:
                 for angle in range(360):
                     if self.scan[angle] > 0.0:
-                        if not prev:
+                        newPoint = self.convertToXY(angle, self.scan[angle])
+                        if not prev or distanceTo(walls[len(walls)-1][len(walls[len(walls)-1])-1], newPoint) > self.maxWallDistance:
                             walls.append([])
-                            walls[len(walls)-1].append(self.convertToXY(angle, self.scan[angle]))
+                            walls[len(walls)-1].append(newPoint)
+                            wallStartIndices.append(angle)
                             prev = True
-                        elif:
-
                         else:
-
+                            walls[len(walls)-1].append(newPoint)
+                            prev = True
                     else:
                         prev = False
-            for wall in walls:
-                if len(wall) > largestWallLength:
-                    largestWallLength = len(wall)
-                    largestWall = wall
-            print(largestWall)
+                for i in len(walls)-1:
+                    wall = walls[i]
+                    if len(wall) > largestWallLength:
+                        largestWallLength = len(wall)
+                        largestWall = wall
+                        largestWallIndex = wallStartIndices[i]
+
+                if
             self.velocityPublisher.publish(self.vel)
 
 if __name__ == "__main__":
