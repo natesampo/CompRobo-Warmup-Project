@@ -10,6 +10,7 @@ import thread
 import signal
 import math
 from std_msgs.msg import Header
+from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist, Vector3, Point, PointStamped
 from nav_msgs.msg import Odometry
 import Xlib.display as display
@@ -53,7 +54,7 @@ def mouseToXY(mousePos):
 def getCurrentMousePosition():
     return (display.Display().screen().root.query_pointer()._data['root_x'], display.Display().screen().root.query_pointer()._data['root_y'])
 
-def input_thread(driveSquare):
+def input_thread(wallFollower):
     running = True
     while running:
         '''Given code to grab keyboard values'''
@@ -65,69 +66,51 @@ def input_thread(driveSquare):
             running = False
             os.kill(os.getpid(), signal.SIGINT)
 
-class driveSquare(object):
+class wallFollower(object):
     def __init__ (self):
-        rospy.init_node("square", disable_signals=True)
-        self.scan_subscriber = rospy.Subscriber("/scan", LaserScan, self.follow_wall)
+        rospy.init_node("wall_follower", disable_signals=True)
+        self.scan_subscriber = rospy.Subscriber('scan', LaserScan, self.getScan)
+        self.odom_sub = rospy.Subscriber('odom', Odometry, self.getOdom)
         self.velocityPublisher = rospy.Publisher('cmd_vel', Twist, queue_size=5)
-        self.targetAngle = -1.57
-        self.moving = True
-        self.angle = 0
         self.speed = 0.5
-        self.topSpeed = 0.7
         self.rate = rospy.Rate(10)
         self.vel = Twist()
         self.pose = (0, 0, 0)
-        self.origin = self.pose
-        self.getNewOrigin = True
+        self.scan = []
         self.man_toggle = False
 
     def getOdom(self, msg):
         self.pose = convert_pose_to_xy_and_theta(msg.pose.pose)
-        if self.getNewOrigin:
-            self.newOrigin()
-            self.getNewOrigin = False
 
-    def newOrigin(self):
-        self.origin = self.pose
-        self.mouseOrigin = getCurrentMousePosition()
+    def getScan(self, msg):
+        self.scan = msg.ranges;
 
-    def getRelativePosition(self):
-        return (self.pose[0] - self.origin[0], self.pose[1] - self.origin[1])
-
-    def getRelativeAngle(self):
-        return angle_diff(self.pose[2], self.origin[2])
+    def convertToXY(self, angle, r):
+        newX = math.cos(self.pose[2] + angle)*r
+        newY = math.sin(self.pose[2] + angle)*r
+        return (newX, newY)
 
     def run(self):
         while not rospy.is_shutdown():
-            if not self.man_toggle:
-                print self.getRelativeAngle()
-                if not self.moving and self.getRelativeAngle() < self.targetAngle + 0.1 and self.getRelativeAngle() > self.targetAngle - 0.1: # not turning
-                    self.moving = True
-                    #self.targetAngle += 3.14
-                else: # turn baby turn disco inferno
-                    self.vel.linear.x = 0
-                    self.vel.angular.z = -min(abs(max(self.speed*(abs(self.targetAngle-self.getRelativeAngle())), 0.2)), self.topSpeed)
-
-                if abs(self.getRelativePosition()[0]) <= 1: # you are not there yet
-                    if self.moving:
-                        self.vel.linear.x = self.speed#*((1.5-(self.pose[0]+self.pose[1])/2))
-                        self.vel.angular.z = 0
-                else: # you are
-                    self.vel.linear.x = 0
-                    self.vel.angular.z = 0
-                    self.newOrigin()
-                    self.moving = False
-
+            prev = False
+            walls = []
+            for angle in range(360):
+                if self.scan[angle] > 0.0:
+                    if not prev:
+                        walls.append([])
+                    walls[len(walls)-1].append(self.convertToXY(angle, range[angle]))
+                else:
+                    prev = False
+            print(walls)
             self.velocityPublisher.publish(self.vel)
 
 if __name__ == "__main__":
     settings = termios.tcgetattr(sys.stdin)
-    driveSquare = driveSquare()
-    thread.start_new_thread(input_thread, (driveSquare, ))
+    wallFollower = wallFollower()
+    thread.start_new_thread(input_thread, (wallFollower, ))
     try:
-        driveSquare.run()
+        wallFollower.run()
     except KeyboardInterrupt:
-        driveSquare.vel.linear.x = 0
-        driveSquare.vel.angular.z = 0
-        driveSquare.velocityPublisher.publish(driveSquare.vel)
+        wallFollower.vel.linear.x = 0
+        wallFollower.vel.angular.z = 0
+        wallFollower.velocityPublisher.publish(wallFollower.vel)
