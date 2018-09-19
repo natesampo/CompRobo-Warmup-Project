@@ -77,14 +77,14 @@ class wallFollower(object):
         self.vel = Twist()
         self.pose = (0, 0, 0)
         self.scan = []
-        self.man_toggle = False
+        self.maxWallDistance = 0.5
 
     def getOdom(self, msg):
         self.pose = convert_pose_to_xy_and_theta(msg.pose.pose)
 
     def getScan(self, msg):
-        self.scan = msg.ranges;
-        print msg
+        print('scan')
+        self.scan = msg.ranges
 
     def convertToXY(self, angle, r):
         newX = math.cos(self.pose[2] + angle)*r
@@ -95,15 +95,26 @@ class wallFollower(object):
         while not rospy.is_shutdown():
             prev = False
             walls = []
+            largestWall = []
+            largestWallLength = 0
             if len(self.scan) > 0:
                 for angle in range(360):
                     if self.scan[angle] > 0.0:
                         if not prev:
                             walls.append([])
-                        walls[len(walls)-1].append(self.convertToXY(angle, range[angle]))
+                            walls[len(walls)-1].append(self.convertToXY(angle, self.scan[angle]))
+                            prev = True
+                        elif:
+
+                        else:
+
                     else:
                         prev = False
-                print(walls)
+            for wall in walls:
+                if len(wall) > largestWallLength:
+                    largestWallLength = len(wall)
+                    largestWall = wall
+            print(largestWall)
             self.velocityPublisher.publish(self.vel)
 
 if __name__ == "__main__":
