@@ -84,6 +84,7 @@ class wallFollower(object):
 
     def getScan(self, msg):
         self.scan = msg.ranges;
+        print msg
 
     def convertToXY(self, angle, r):
         newX = math.cos(self.pose[2] + angle)*r
@@ -94,14 +95,15 @@ class wallFollower(object):
         while not rospy.is_shutdown():
             prev = False
             walls = []
-            for angle in range(360):
-                if self.scan[angle] > 0.0:
-                    if not prev:
-                        walls.append([])
-                    walls[len(walls)-1].append(self.convertToXY(angle, range[angle]))
-                else:
-                    prev = False
-            print(walls)
+            if len(self.scan) > 0:
+                for angle in range(360):
+                    if self.scan[angle] > 0.0:
+                        if not prev:
+                            walls.append([])
+                        walls[len(walls)-1].append(self.convertToXY(angle, range[angle]))
+                    else:
+                        prev = False
+                print(walls)
             self.velocityPublisher.publish(self.vel)
 
 if __name__ == "__main__":
