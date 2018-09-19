@@ -72,12 +72,13 @@ class wallFollower(object):
         self.scan_subscriber = rospy.Subscriber('scan', LaserScan, self.getScan)
         self.odom_sub = rospy.Subscriber('odom', Odometry, self.getOdom)
         self.velocityPublisher = rospy.Publisher('cmd_vel', Twist, queue_size=5)
-        self.speed = 0.5
+        self.speed = 0.2
         self.rate = rospy.Rate(10)
         self.vel = Twist()
         self.pose = (0, 0, 0)
         self.scan = []
         self.maxWallDistance = 0.3
+        self.wallFollowDistance = 1
 
     def getOdom(self, msg):
         self.pose = convert_pose_to_xy_and_theta(msg.pose.pose)
@@ -86,8 +87,8 @@ class wallFollower(object):
         self.scan = msg.ranges
 
     def convertToXY(self, angle, r):
-        newX = math.cos(self.pose[2] + math.radians(angle))*r
-        newY = math.sin(self.pose[2] + math.radians(angle))*r
+        newX = math.cos(math.radians(angle))*r
+        newY = math.sin(math.radians(angle))*r
         return (newX, newY)
 
     def run(self):
@@ -96,30 +97,59 @@ class wallFollower(object):
             walls = []
             largestWall = []
             largestWallLength = 0
-            wallStartIndices = []
-            largestWallIndex = 0
+            closestPointDistance = 5
             if len(self.scan) > 0:
                 for angle in range(360):
                     if self.scan[angle] > 0.0:
                         newPoint = self.convertToXY(angle, self.scan[angle])
-                        if not prev or distanceTo(walls[len(walls)-1][len(walls[len(walls)-1])-1], newPoint) > self.maxWallDistance:
+                        if not prev or distanceTo(walls[-1][-1], newPoint) > self.maxWallDistance:
                             walls.append([])
-                            walls[len(walls)-1].append(newPoint)
-                            wallStartIndices.append(angle)
+                            walls[-1].append((newPoint[0], newPoint[1], angle))
                             prev = True
                         else:
-                            walls[len(walls)-1].append(newPoint)
+                            walls[-1].append((newPoint[0], newPoint[1], angle))
                             prev = True
                     else:
                         prev = False
-                for i in len(walls)-1:
-                    wall = walls[i]
+
+                if distanceTo((walls[0][0][0], walls[0][0][1]), (walls[-1][-1][0], walls[-1][-1][1])) < self.maxWallDistance:
+                    walls[0] = walls[0] + walls[-1]
+                    walls = walls[:-1]
+
+                for wall in walls:
                     if len(wall) > largestWallLength:
                         largestWallLength = len(wall)
                         largestWall = wall
-                        largestWallIndex = wallStartIndices[i]
 
-                if
+                for point in largestWall:
+                    if math.sqrt((point[0]*point[0])+(point[1]*point[1])) < closestPointDistance:
+                        largestWallClosestPoint = point
+                        closestPointDistance = math.sqrt((point[0]*point[0])+(point[1]*point[1]))
+
+                if largestWallClosestPoint[2] > 180 and largestWallClosestPoint[2] < 280 or largestWallClosestPoint[2] >= 0 and largestWallClosestPoint[2] < 80:
+                    self.vel.angular.z = -self.speed
+                    self.vel.linear.x = self.speed
+                elif largestWallClosestPoint[2] <= 180 and largestWallClosestPoint[2] > 100 or largestWallClosestPoint[2] <= 360 and largestWallClosestPoint[2] > 260:
+                    self.vel.angular.z = self.speed
+                    self.vel.linear.x = self.speed
+                else:
+                    self.vel.angular.z = 0
+                    self.vel.linear.x = self.speed
+
+                if len(largestWall[0]) > 1:
+                    if closestPointDistance > self.wallFollowDistance:
+                        if largestWallClosestPoint[2] > 50 and largestWallClosestPoint[2] < 180:
+                            self.vel.angular.z = self.speed
+                        elif largestWallClosestPoint[2] < 310 and largestWallClosestPoint[2] >= 180:
+                            self.vel.angular.z = -self.speed
+                    elif closestPointDistance < self.wallFollowDistance/1.5:
+                        if largestWallClosestPoint[2] < 100:
+                            self.vel.linear.x = 0
+                            self.vel.angular.z = -self.speed
+                        elif largestWallClosestPoint[2] > 260:
+                            self.vel.linear.x = 0
+                            self.vel.angular.z = self.speed
+
             self.velocityPublisher.publish(self.vel)
 
 if __name__ == "__main__":
