@@ -12,6 +12,7 @@ import math
 from std_msgs.msg import Header
 from geometry_msgs.msg import Twist, Vector3, Point, PointStamped
 from nav_msgs.msg import Odometry
+import Xlib
 import Xlib.display as display
 from tf.transformations import euler_from_quaternion, rotation_matrix, quaternion_from_matrix
 
@@ -47,8 +48,8 @@ def angle_diff(a, b):
 def distanceTo(a, b):
     return math.sqrt((a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]))
 
-def mouseToXY(mousePos):
-    return (mousePos[0]/1000, mousePos[1]/1000)
+def mouseToPercent(mousePos):
+    return (mousePos[0]/(display.Display().screen().root.get_geometry().width/2), mousePos[1]/(display.Display().screen().root.get_geometry().height/2))
 
 def getCurrentMousePosition():
     return (display.Display().screen().root.query_pointer()._data['root_x'], display.Display().screen().root.query_pointer()._data['root_y'])
@@ -94,11 +95,10 @@ class TeleopC(object):
         self.mouseOrigin = (display.Display().screen().root.query_pointer()._data['root_x'], display.Display().screen().root.query_pointer()._data['root_y'])
         self.velocityPublisher = rospy.Publisher('cmd_vel', Twist, queue_size=5)
         self.angle = 0
-        self.speed = 0.2
+        self.speed = 0.3
         self.rate = rospy.Rate(10)
         self.vel = Twist()
         self.pose = (0, 0, 0)
-        self.origin = self.pose
         self.getNewOrigin = True
         self.man_toggle = False
 
@@ -109,7 +109,6 @@ class TeleopC(object):
             self.getNewOrigin = False
 
     def newOrigin(self):
-        self.origin = self.pose
         self.mouseOrigin = getCurrentMousePosition()
 
     def getRelativeMousePosition(self, mousePos):
@@ -118,34 +117,11 @@ class TeleopC(object):
     def run(self):
         while not rospy.is_shutdown():
             if not self.man_toggle:
-                currMouseOffset = (mouseToXY(self.getRelativeMousePosition(getCurrentMousePosition()))[0] - (self.pose[0] - self.origin[0]), mouseToXY(self.getRelativeMousePosition(getCurrentMousePosition()))[1] - (self.pose[1] - self.origin[1]))
-                currAngleOffset = math.atan2(currMouseOffset[1], currMouseOffset[0])-self.angle
-                if abs(angle_diff(self.pose[2], currAngleOffset)) < 0.3:
-                    if math.sqrt((currMouseOffset[0]*currMouseOffset[0]) + (currMouseOffset[1]*currMouseOffset[1])) > 0.2:
-                        self.vel.linear.x = -self.speed*(math.sqrt((currMouseOffset[0]*currMouseOffset[0]) + (currMouseOffset[1]*currMouseOffset[1]))/2)
-                        self.vel.angular.z = 0
-                else:
-                    if abs(angle_diff(self.pose[2], currAngleOffset)) < 0.05:
-                        if math.sqrt((currMouseOffset[0]*currMouseOffset[0]) + (currMouseOffset[1]*currMouseOffset[1])) > 0.2:
-                            if angle_diff(self.pose[2], currAngleOffset) > 0:
-                                self.vel.angular.z = self.speed*(abs(angle_diff(self.pose[2], currAngleOffset))/1.5)
-                            else:
-                                self.vel.angular.z = -self.speed*(abs(angle_diff(self.pose[2], currAngleOffset))/1.5)
-                        else:
-                            self.vel.angular.z = 0
-                        self.vel.linear.x = 0
-                    elif abs(angle_diff(self.pose[2], currAngleOffset)) >= 0.05:
-                        if math.sqrt((currMouseOffset[0]*currMouseOffset[0]) + (currMouseOffset[1]*currMouseOffset[1])) > 0.2:
-                            if angle_diff(self.pose[2], currAngleOffset) > 0:
-                                self.vel.angular.z = self.speed*(abs(angle_diff(self.pose[2], currAngleOffset))/1.5)
-                            else:
-                                self.vel.angular.z = -self.speed*(abs(angle_diff(self.pose[2], currAngleOffset))/1.5)
-                            self.vel.linear.x = -self.speed*(math.sqrt((currMouseOffset[0]*currMouseOffset[0]) + (currMouseOffset[1]*currMouseOffset[1]))/2)*0.5
-                        else:
-                            self.vel.angular.z = 0
-                            self.vel.linear.x = 0
+                mouseXY = mouseToPercent(self.getRelativeMousePosition(getCurrentMousePosition()))
 
-            print(math.sqrt((currMouseOffset[0]*currMouseOffset[0]) + (currMouseOffset[1]*currMouseOffset[1])))
+                self.vel.linear.x = -mouseXY[1]*self.speed
+                self.vel.angular.z = -mouseXY[0]*self.speed
+
             self.velocityPublisher.publish(self.vel)
 
 if __name__ == "__main__":

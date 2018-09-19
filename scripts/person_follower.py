@@ -48,13 +48,7 @@ def angle_diff(a, b):
 def distanceTo(a, b):
     return math.sqrt((a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]))
 
-def mouseToXY(mousePos):
-    return (mousePos[0]/1500, mousePos[1]/1500)
-
-def getCurrentMousePosition():
-    return (display.Display().screen().root.query_pointer()._data['root_x'], display.Display().screen().root.query_pointer()._data['root_y'])
-
-def input_thread(wallFollower):
+def input_thread(personFollower):
     running = True
     while running:
         '''Given code to grab keyboard values'''
@@ -66,19 +60,20 @@ def input_thread(wallFollower):
             running = False
             os.kill(os.getpid(), signal.SIGINT)
 
-class wallFollower(object):
+class personFollower(object):
     def __init__ (self):
-        rospy.init_node("wall_follower", disable_signals=True)
+        rospy.init_node("person_follower", disable_signals=True)
         self.scan_subscriber = rospy.Subscriber('scan', LaserScan, self.getScan)
         self.odom_sub = rospy.Subscriber('odom', Odometry, self.getOdom)
         self.velocityPublisher = rospy.Publisher('cmd_vel', Twist, queue_size=5)
-        self.speed = 0.2
+        self.speed = 0.3
         self.rate = rospy.Rate(10)
         self.vel = Twist()
         self.pose = (0, 0, 0)
         self.scan = []
-        self.maxWallDistance = 0.3
-        self.wallFollowDistance = 1
+        self.maxPersonDistance = 0.1
+        self.personFollowDistance = 1
+        self.minimumPersonPoints = 2
 
     def getOdom(self, msg):
         self.pose = convert_pose_to_xy_and_theta(msg.pose.pose)
@@ -94,71 +89,65 @@ class wallFollower(object):
     def run(self):
         while not rospy.is_shutdown():
             prev = False
-            walls = []
-            largestWall = []
-            largestWallLength = 0
+            objects = []
+            closestPerson = []
+            closestPersonDistance = 0
             closestPointDistance = 5
             if len(self.scan) > 0:
                 for angle in range(360):
                     if self.scan[angle] > 0.0:
                         newPoint = self.convertToXY(angle, self.scan[angle])
-                        if not prev or distanceTo(walls[-1][-1], newPoint) > self.maxWallDistance:
-                            walls.append([])
-                            walls[-1].append((newPoint[0], newPoint[1], angle))
+                        if not prev or distanceTo(objects[-1][-1], newPoint) > self.maxPersonDistance:
+                            objects.append([])
+                            objects[-1].append((newPoint[0], newPoint[1], angle))
                             prev = True
                         else:
-                            walls[-1].append((newPoint[0], newPoint[1], angle))
+                            objects[-1].append((newPoint[0], newPoint[1], angle))
                             prev = True
                     else:
                         prev = False
 
-                if distanceTo((walls[0][0][0], walls[0][0][1]), (walls[-1][-1][0], walls[-1][-1][1])) < self.maxWallDistance:
-                    walls[0] = walls[0] + walls[-1]
-                    walls = walls[:-1]
+                if distanceTo((objects[0][0][0], objects[0][0][1]), (objects[-1][-1][0], objects[-1][-1][1])) < self.maxPersonDistance:
+                    objects[0] = objects[0] + objects[-1]
+                    objects = objects[:-1]
 
-                for wall in walls:
-                    if len(wall) > largestWallLength:
-                        largestWallLength = len(wall)
-                        largestWall = wall
+                for object in objects:
+                    if len(object) >= self.minimumPersonPoints:
+                        for point in object:
+                            if math.sqrt((point[0]*point[0])+(point[1]*point[1])) < closestPointDistance:
+                                closestPersonDistance = len(object)
+                                closestPerson = object
+                                closestPersonClosestPoint = point
+                                closestPointDistance = math.sqrt((point[0]*point[0])+(point[1]*point[1]))
 
-                for point in largestWall:
-                    if math.sqrt((point[0]*point[0])+(point[1]*point[1])) < closestPointDistance:
-                        largestWallClosestPoint = point
-                        closestPointDistance = math.sqrt((point[0]*point[0])+(point[1]*point[1]))
-
-                if largestWallClosestPoint[2] > 180 and largestWallClosestPoint[2] < 280 or largestWallClosestPoint[2] >= 0 and largestWallClosestPoint[2] < 80:
-                    self.vel.angular.z = -self.speed
-                    self.vel.linear.x = self.speed
-                elif largestWallClosestPoint[2] <= 180 and largestWallClosestPoint[2] > 100 or largestWallClosestPoint[2] <= 360 and largestWallClosestPoint[2] > 260:
+                if closestPersonClosestPoint[2] > 5 and closestPersonClosestPoint[2] <= 100:
                     self.vel.angular.z = self.speed
-                    self.vel.linear.x = self.speed
-                else:
+                    self.vel.linear.x = self.speed*closestPointDistance/2
+                elif closestPersonClosestPoint[2] < 355 and closestPersonClosestPoint[2] >= 260:
+                    self.vel.angular.z = -self.speed
+                    self.vel.linear.x = self.speed*closestPointDistance/2
+                elif closestPersonClosestPoint[2] <=5 or closestPersonClosestPoint[2] >= 355:
                     self.vel.angular.z = 0
-                    self.vel.linear.x = self.speed
+                    self.vel.linear.x = self.speed*closestPointDistance/2
+                else:
+                    self.vel.linear.x = 0
+                    self.vel.angular.z = 0
 
-                if len(largestWall[0]) > 1:
-                    if closestPointDistance > self.wallFollowDistance:
-                        if largestWallClosestPoint[2] > 50 and largestWallClosestPoint[2] < 180:
-                            self.vel.angular.z = self.speed
-                        elif largestWallClosestPoint[2] < 310 and largestWallClosestPoint[2] >= 180:
-                            self.vel.angular.z = -self.speed
-                    elif closestPointDistance < self.wallFollowDistance/1.5:
-                        if largestWallClosestPoint[2] < 100:
-                            self.vel.linear.x = 0
-                            self.vel.angular.z = -self.speed
-                        elif largestWallClosestPoint[2] > 260:
-                            self.vel.linear.x = 0
-                            self.vel.angular.z = self.speed
+
+                if len(closestPerson) > 1:
+                    if closestPointDistance < self.personFollowDistance/2:
+                        self.vel.linear.x = 0
+
 
             self.velocityPublisher.publish(self.vel)
 
 if __name__ == "__main__":
     settings = termios.tcgetattr(sys.stdin)
-    wallFollower = wallFollower()
-    thread.start_new_thread(input_thread, (wallFollower, ))
+    personFollower = personFollower()
+    thread.start_new_thread(input_thread, (personFollower, ))
     try:
-        wallFollower.run()
+        personFollower.run()
     except KeyboardInterrupt:
-        wallFollower.vel.linear.x = 0
-        wallFollower.vel.angular.z = 0
-        wallFollower.velocityPublisher.publish(wallFollower.vel)
+        personFollower.vel.linear.x = 0
+        personFollower.vel.angular.z = 0
+        personFollower.velocityPublisher.publish(personFollower.vel)

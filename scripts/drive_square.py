@@ -46,13 +46,7 @@ def angle_diff(a, b):
 
 def distanceTo(a, b):
     return math.sqrt((a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]))
-
-def mouseToXY(mousePos):
-    return (mousePos[0]/1500, mousePos[1]/1500)
-
-def getCurrentMousePosition():
-    return (display.Display().screen().root.query_pointer()._data['root_x'], display.Display().screen().root.query_pointer()._data['root_y'])
-
+    
 def input_thread(driveSquare):
     running = True
     while running:
