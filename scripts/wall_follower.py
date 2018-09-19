@@ -68,7 +68,7 @@ def input_thread(driveSquare):
 class driveSquare(object):
     def __init__ (self):
         rospy.init_node("square", disable_signals=True)
-        self.odom_sub = rospy.Subscriber('odom', Odometry, self.getOdom)
+        self.scan_subscriber = rospy.Subscriber("/scan", LaserScan, self.follow_wall)
         self.velocityPublisher = rospy.Publisher('cmd_vel', Twist, queue_size=5)
         self.targetAngle = -1.57
         self.moving = True
