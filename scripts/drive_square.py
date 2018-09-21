@@ -88,7 +88,6 @@ class driveSquare(object):
     def newOrigin(self):
         '''Reset the mouse origin on the screen'''
         self.origin = self.pose
-        self.mouseOrigin = getCurrentMousePosition()
 
     def getRelativePosition(self):
         '''Get robot position relative to current origin'''
@@ -101,14 +100,13 @@ class driveSquare(object):
     def run(self):
         while not rospy.is_shutdown():
             if not self.man_toggle:
-                print self.getRelativeAngle()
                 if not self.moving and self.getRelativeAngle() < self.targetAngle + 0.1 and self.getRelativeAngle() > self.targetAngle - 0.1: # not turning
                     self.moving = True
                 else:
                     self.vel.linear.x = 0
                     self.vel.angular.z = -min(abs(max(self.speed*(abs(self.targetAngle-self.getRelativeAngle())), 0.2)), self.topSpeed)
 
-                if abs(self.getRelativePosition()[0]) <= 1:
+                if math.sqrt(self.getRelativePosition()[0]*self.getRelativePosition()[0] + self.getRelativePosition()[1]*self.getRelativePosition()[1]) <= 1:
                     if self.moving:
                         self.vel.linear.x = self.speed
                         self.vel.angular.z = 0

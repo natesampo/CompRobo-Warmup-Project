@@ -127,10 +127,10 @@ class wallFollower(object):
                             self.vel.angular.z = -self.speed
                     elif closestPointDistance < self.wallFollowDistance/1.5:
                         if largestWallClosestPoint[2] < 100:
-                            self.vel.linear.x = 0
+                            self.vel.linear.x = self.speed/2
                             self.vel.angular.z = -self.speed
                         elif largestWallClosestPoint[2] > 260:
-                            self.vel.linear.x = 0
+                            self.vel.linear.x = self.speed/2
                             self.vel.angular.z = self.speed
 
             self.velocityPublisher.publish(self.vel)

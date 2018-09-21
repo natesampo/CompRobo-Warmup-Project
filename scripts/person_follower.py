@@ -72,12 +72,12 @@ class personFollower(object):
         '''Given an angle and whether or not the previous point was part of an object, create or add to an object and return if this point is part of an object'''
         if self.scan[angle] > 0.0:
             newPoint = self.convertToXY(angle, self.scan[angle])
-            if not prev or distanceTo(objects[-1][-1], newPoint) > self.maxPersonDistance:
-                objects.append([])
-                objects[-1].append((newPoint[0], newPoint[1], angle))
+            if not prev or distanceTo(self.objects[-1][-1], newPoint) > self.maxPersonDistance:
+                self.objects.append([])
+                self.objects[-1].append((newPoint[0], newPoint[1], angle))
                 prev = True
             else:
-                objects[-1].append((newPoint[0], newPoint[1], angle))
+                self.objects[-1].append((newPoint[0], newPoint[1], angle))
                 prev = True
         else:
             prev = False
@@ -87,7 +87,7 @@ class personFollower(object):
     def run(self):
         while not rospy.is_shutdown():
             prev = False
-            objects = []
+            self.objects = []
             closestPerson = []
             closestPersonDistance = 0
             closestPointDistance = 5
@@ -95,31 +95,32 @@ class personFollower(object):
                 for angle in range(360):
                     prev = self.processScan(angle, prev)
 
-                if distanceTo((objects[0][0][0], objects[0][0][1]), (objects[-1][-1][0], objects[-1][-1][1])) < self.maxPersonDistance:
-                    objects[0] = objects[0] + objects[-1]
-                    objects = objects[:-1]
+                if distanceTo((self.objects[0][0][0], self.objects[0][0][1]), (self.objects[-1][-1][0], self.objects[-1][-1][1])) < self.maxPersonDistance:
+                    self.objects[0] = self.objects[0] + self.objects[-1]
+                    self.objects = self.objects[:-1]
 
-                for object in objects:
-                    if len(object) >= self.minimumPersonPoints:
-                        for point in object:
-                            if math.sqrt((point[0]*point[0])+(point[1]*point[1])) < closestPointDistance:
-                                closestPersonDistance = len(object)
-                                closestPerson = object
-                                closestPersonClosestPoint = point
-                                closestPointDistance = math.sqrt((point[0]*point[0])+(point[1]*point[1]))
+                if len(self.objects) > 0:
+                    for object in self.objects:
+                        if len(object) >= self.minimumPersonPoints:
+                            for point in object:
+                                if math.sqrt((point[0]*point[0])+(point[1]*point[1])) < closestPointDistance:
+                                    closestPersonDistance = len(object)
+                                    closestPerson = object
+                                    closestPersonClosestPoint = point
+                                    closestPointDistance = math.sqrt((point[0]*point[0])+(point[1]*point[1]))
 
-                if closestPersonClosestPoint[2] > 5 and closestPersonClosestPoint[2] <= 100:
-                    self.vel.angular.z = self.speed
-                    self.vel.linear.x = self.speed*closestPointDistance/2
-                elif closestPersonClosestPoint[2] < 355 and closestPersonClosestPoint[2] >= 260:
-                    self.vel.angular.z = -self.speed
-                    self.vel.linear.x = self.speed*closestPointDistance/2
-                elif closestPersonClosestPoint[2] <=5 or closestPersonClosestPoint[2] >= 355:
-                    self.vel.angular.z = 0
-                    self.vel.linear.x = self.speed*closestPointDistance/2
-                else:
-                    self.vel.linear.x = 0
-                    self.vel.angular.z = 0
+                    if closestPersonClosestPoint[2] > 5 and closestPersonClosestPoint[2] <= 100:
+                        self.vel.angular.z = self.speed
+                        self.vel.linear.x = self.speed*closestPointDistance/2
+                    elif closestPersonClosestPoint[2] < 355 and closestPersonClosestPoint[2] >= 260:
+                        self.vel.angular.z = -self.speed
+                        self.vel.linear.x = self.speed*closestPointDistance/2
+                    elif closestPersonClosestPoint[2] <=5 or closestPersonClosestPoint[2] >= 355:
+                        self.vel.angular.z = 0
+                        self.vel.linear.x = self.speed*closestPointDistance/2
+                    else:
+                        self.vel.linear.x = 0
+                        self.vel.angular.z = 0
 
                 if len(closestPerson) > 1:
                     if closestPointDistance < self.personFollowDistance/1.8:

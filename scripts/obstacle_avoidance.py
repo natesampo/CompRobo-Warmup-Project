@@ -96,6 +96,7 @@ class avoid_obst(object):
 
     def processObjects(self):
         '''Use the current object list to calculate the forces each object applies to the robot by finding each object's closest point'''
+        closestPoints = []
         if distanceTo((self.objects[0][0][0], self.objects[0][0][1]), (self.objects[-1][-1][0], self.objects[-1][-1][1])) < self.maxObjectDistance:
             self.objects[0] = self.objects[0] + self.objects[-1]
             self.objects = self.objects[:-1]
@@ -112,6 +113,8 @@ class avoid_obst(object):
         for point in closestPoints:
             self.totalForce = (self.totalForce[0]-point[0], self.totalForce[1]-point[1]*10)
 
+        return closestPoints
+
     def run(self):
         while not rospy.is_shutdown():
             prev = False
@@ -126,7 +129,7 @@ class avoid_obst(object):
                     prev = self.processScan(angle, prev)
 
                 if len(self.objects) > 0:
-                    self.processObjects()
+                    closestPoints = self.processObjects()
 
                 self.vel.linear.x = self.speed*self.convertToPolar(self.totalForce[0], self.totalForce[1])[0]/2
                 self.vel.angular.z = self.speed*self.convertToPolar(self.totalForce[0], self.totalForce[1])[1]*5

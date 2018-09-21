@@ -49,7 +49,7 @@ def input_thread(myTeleop):
         elif key == 'a':
             '''Reset origin'''
             myTeleop.newOrigin()
-        elif key == 'w'
+        elif key == 'w':
             '''Toggle manual mode'''
             myTeleop.man_toggle = not myTeleop.man_toggle
             myTeleop.vel.linear.x = 0
