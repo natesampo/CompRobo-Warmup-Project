@@ -47,7 +47,7 @@ def angle_diff(a, b):
 
 def distanceTo(a, b):
     return math.sqrt((a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]))
-    
+
 def input_thread(wallFollower):
     running = True
     while running:

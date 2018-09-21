@@ -48,12 +48,6 @@ def angle_diff(a, b):
 def distanceTo(a, b):
     return math.sqrt((a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]))
 
-def mouseToXY(mousePos):
-    return (mousePos[0]/1500, mousePos[1]/1500)
-
-def getCurrentMousePosition():
-    return (display.Display().screen().root.query_pointer()._data['root_x'], display.Display().screen().root.query_pointer()._data['root_y'])
-
 def input_thread(avoid_obst):
     running = True
     while running:
@@ -65,25 +59,11 @@ def input_thread(avoid_obst):
         if key == 'q':
             running = False
             os.kill(os.getpid(), signal.SIGINT)
-        elif key == 'w':
-            avoid_obst.man_toggle = not avoid_obst.man_toggle
-            avoid_obst.vel.linear.x = 0
-            avoid_obst.vel.angular.z = 0
-        elif key == 'i' and avoid_obst.man_toggle:
-            avoid_obst.vel.linear.x = 1
-            avoid_obst.vel.angular.z = 0
-        elif key =='k' and avoid_obst.man_toggle:
-            avoid_obst.vel.linear.x = -1
-            avoid_obst.vel.angular.z = 0
-        elif key == 'j' and avoid_obst.man_toggle:
-            avoid_obst.vel.linear.x = 0
-            avoid_obst.vel.angular.z = -1
-        elif key == 'l' and avoid_obst.man_toggle:
-            avoid_obst.vel.linear.x = 0
-            avoid_obst.vel.angular.z = 1
-        elif key == 's':
-            avoid_obst.vel.linear.x = 0
-            avoid_obst.vel.angular.z = 0
+
+def pointToForce(point):
+    theta = math.atan2(point[1], point[0])
+    distance = math.sqrt((point[0])*(point[0]) + (point[1])*(point[1]))
+    return (-0.5*distance*math.cos(theta), -0.5*distance*math.sin(theta))
 
 class avoid_obst(object):
     def __init__ (self):
@@ -91,91 +71,95 @@ class avoid_obst(object):
         self.scan_subscriber = rospy.Subscriber('scan', LaserScan, self.getScan)
         self.odom_sub = rospy.Subscriber('odom', Odometry, self.getOdom)
         self.velocityPublisher = rospy.Publisher('cmd_vel', Twist, queue_size=5)
-        self.speed = 0.5
+        self.speed = 0.2
         self.rate = rospy.Rate(10)
         self.vel = Twist()
         self.pose = (0, 0, 0)
         self.scan = []
-        self.maxWallDistance = 0.5
-        self.Fx = []
-        self.Fy = []
-        self.tot_Fx = 0
-        self.tot_Fy = 0
-        self.man_toggle = False
+        self.minimumObjectPoints = 2
+        self.maxObjectDistance = 0.2
+        self.maxTrackDistance = 1.5
+        self.totalForce = (0, 0)
+        self.goal = (0, 0)
 
     def getOdom(self, msg):
         self.pose = convert_pose_to_xy_and_theta(msg.pose.pose)
+        if self.goal == (0, 0):
+            self.goal = (self.pose[0], 2+self.pose[1])
 
     def getScan(self, msg):
         self.scan = msg.ranges
 
     def convertToXY(self, angle, r):
-        newX = math.cos( math.radians(angle))*r
-        newY = math.sin( math.radians(angle))*r
+        newX = math.cos(math.radians(angle-90))*r
+        newY = math.sin(math.radians(angle-90))*r
         return (newX, newY)
 
-    def dist_to_force(self,val):
-        #converts the value into a force from 0 - 4 where 0 is far and 4 is close. anything greater than 2 m is far
-        if val == 0 or val >= 0.5 or val <=-0.5 :
-            return 0
-        else:
-            return (val-1)*(val-1)*(val/abs(val))
-
-    def find_forces(self):
-        dists = ()
-        if len(self.scan) > 0:
-            for i in range(0,360):
-                #angle = i
-                #self.scan[i] = r
-                if self.scan[i] == 0:
-                    self.Fx.append((i,0))
-                    self.Fy.append((i,0))
-                    self.tot_Fx+=0
-                    self.tot_Fy+=0
-                else:
-                    dists = self.convertToXY(i,self.scan[i])
-                    self.Fx.append((i,self.dist_to_force(dists[0])))
-                    self.Fy.append((i,self.dist_to_force(dists[1])))
-                    self.tot_Fx+=self.dist_to_force(dists[0])*self.scan[i]
-                    self.tot_Fy+=self.scan[i]*self.dist_to_force(dists[1])
+    def convertToRadians(self, x, y):
+        r = math.sqrt(x*x + y*y)
+        theta = math.degrees(math.arctan2(y, x))-90
+        return (r, theta)
 
     def run(self):
+        a=0
         while not rospy.is_shutdown():
-            if not self.man_toggle:
-                if len(self.scan) > 0:
-                    self.Fx = []
-                    self.Fy = []
-                    self.tot_Fx = 0
-                    self.tot_Fy = 0
-                    self.find_forces()
-                    self.vel.linear.x = 0
-                    self.vel.angular.z =0
-                    #print self.vel.linear.x
-                    print  0 - (0.001*self.tot_Fx)
-                    #0.1 + (0.005*self.tot_Fy)
-                    #if self.vel.angular.z+self.vel.linear.x >= 0.3:
-                    #    self.vel.linear.x = 0.3-self.vel.angular.z
-                    #print self.vel.angular.z
-            #prev = False
-            #walls = []
-            #largestWall = []
-            #largestWallLength = 0
-            #if len(self.scan) > 0:
-            #    for angle in range(360):
-            #        if self.scan[angle] > 0.0:
-            #            if not prev:
-            #                walls.append([])
-            #                walls[len(walls)-1].append(self.convertToXY(angle, self.scan[angle]))
-            #                prev = True
-            #            elif:
-            #            else:
-            #        else:
-            #            prev = False
-            #for wall in walls:
-            #    if len(wall) > largestWallLength:
-            #        largestWallLength = len(wall)
-            #        largestWall = wall
-            #print(largestWall)
+            prev = False
+            objects = []
+            closestPoints = []
+            self.vel.linear.x = self.speed/4
+            self.vel.angular.z = 0
+            if len(self.scan) > 0:
+                theta = math.atan2(self.goal[1]-self.pose[1], self.goal[0]-self.pose[0])
+                self.totalForce = (distanceTo(self.goal, (self.pose[0], self.pose[1]))*math.cos(theta), distanceTo(self.goal, (self.pose[0], self.pose[1]))*math.sin(theta))
+                for angle in range(120):
+                    if self.scan[angle] > 0.0 and self.scan[angle] < self.maxTrackDistance:
+                        newPoint = self.convertToXY(angle, self.scan[angle])
+                        if not prev or distanceTo(objects[-1][-1], newPoint) > self.maxObjectDistance:
+                            objects.append([])
+                            objects[-1].append((newPoint[0], newPoint[1], angle))
+                            prev = True
+                        else:
+                            objects[-1].append((newPoint[0], newPoint[1], angle))
+                            prev = True
+                    else:
+                        prev = False
+
+                for angle in range(240, 360):
+                    if self.scan[angle] > 0.0 and self.scan[angle] < self.maxTrackDistance:
+                        newPoint = self.convertToXY(angle, self.scan[angle])
+                        if not prev or distanceTo(objects[-1][-1], newPoint) > self.maxObjectDistance:
+                            objects.append([])
+                            objects[-1].append((newPoint[0], newPoint[1], angle))
+                            prev = True
+                        else:
+                            objects[-1].append((newPoint[0], newPoint[1], angle))
+                            prev = True
+                    else:
+                        prev = False
+
+                if len(objects) > 0:
+                    if distanceTo((objects[0][0][0], objects[0][0][1]), (objects[-1][-1][0], objects[-1][-1][1])) < self.maxObjectDistance:
+                        objects[0] = objects[0] + objects[-1]
+                        objects = objects[:-1]
+
+                    for object in objects:
+                        if len(object) >= self.minimumObjectPoints:
+                            closestPoints.append(5)
+                            for point in object:
+                                if math.sqrt((point[0]*point[0])+(point[1]*point[1])) < closestPoints[-1]:
+                                    closestPoints[-1] = point
+                        else:
+                            objects.remove(object)
+
+                    for point in closestPoints:
+                        self.totalForce = (self.totalForce[0]+pointToForce(point)[0], self.totalForce[1]+pointToForce(point)[1])
+
+                self.vel.linear.x = self.speed*math.sqrt(self.totalForce[0]*self.totalForce[0] + self.totalForce[1]*self.totalForce[1])/6
+                self.vel.angular.z = self.speed*(math.atan2(self.totalForce[1], self.totalForce[0]))/2
+
+            a += 1
+            if a%5000 == 0:
+                print self.convertToRadians()
             self.velocityPublisher.publish(self.vel)
 
 if __name__ == "__main__":

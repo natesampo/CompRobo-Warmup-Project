@@ -133,11 +133,9 @@ class personFollower(object):
                     self.vel.linear.x = 0
                     self.vel.angular.z = 0
 
-
                 if len(closestPerson) > 1:
-                    if closestPointDistance < self.personFollowDistance/2:
+                    if closestPointDistance < self.personFollowDistance/1.8:
                         self.vel.linear.x = 0
-
 
             self.velocityPublisher.publish(self.vel)
 
