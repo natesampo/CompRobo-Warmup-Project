@@ -45,17 +45,19 @@ def angle_diff(a, b):
         return d2
 
 def distanceTo(a, b):
+    '''Calculate distance from point a to point b'''
     return math.sqrt((a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]))
-    
+
 def input_thread(driveSquare):
+    '''Seperate thread for user input, loops, checking for button input'''
     running = True
     while running:
-        '''Given code to grab keyboard values'''
         tty.setraw(sys.stdin.fileno())
         select.select([sys.stdin], [], [], 0)
         key = sys.stdin.read(1)
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
         if key == 'q':
+            '''Kill the program and stop the robot'''
             running = False
             os.kill(os.getpid(), signal.SIGINT)
 
@@ -77,19 +79,23 @@ class driveSquare(object):
         self.man_toggle = False
 
     def getOdom(self, msg):
+        '''Receive and process odom messages, store them as self.pose'''
         self.pose = convert_pose_to_xy_and_theta(msg.pose.pose)
         if self.getNewOrigin:
             self.newOrigin()
             self.getNewOrigin = False
 
     def newOrigin(self):
+        '''Reset the mouse origin on the screen'''
         self.origin = self.pose
         self.mouseOrigin = getCurrentMousePosition()
 
     def getRelativePosition(self):
+        '''Get robot position relative to current origin'''
         return (self.pose[0] - self.origin[0], self.pose[1] - self.origin[1])
 
     def getRelativeAngle(self):
+        '''Get robot angle relative to current origin'''
         return angle_diff(self.pose[2], self.origin[2])
 
     def run(self):
@@ -98,16 +104,15 @@ class driveSquare(object):
                 print self.getRelativeAngle()
                 if not self.moving and self.getRelativeAngle() < self.targetAngle + 0.1 and self.getRelativeAngle() > self.targetAngle - 0.1: # not turning
                     self.moving = True
-                    #self.targetAngle += 3.14
-                else: # turn baby turn disco inferno
+                else:
                     self.vel.linear.x = 0
                     self.vel.angular.z = -min(abs(max(self.speed*(abs(self.targetAngle-self.getRelativeAngle())), 0.2)), self.topSpeed)
 
-                if abs(self.getRelativePosition()[0]) <= 1: # you are not there yet
+                if abs(self.getRelativePosition()[0]) <= 1:
                     if self.moving:
-                        self.vel.linear.x = self.speed#*((1.5-(self.pose[0]+self.pose[1])/2))
+                        self.vel.linear.x = self.speed
                         self.vel.angular.z = 0
-                else: # you are
+                else:
                     self.vel.linear.x = 0
                     self.vel.angular.z = 0
                     self.newOrigin()
@@ -118,6 +123,8 @@ class driveSquare(object):
 if __name__ == "__main__":
     settings = termios.tcgetattr(sys.stdin)
     driveSquare = driveSquare()
+
+    #Start new thread for input so it is not on the same thread as the robot processing
     thread.start_new_thread(input_thread, (driveSquare, ))
     try:
         driveSquare.run()

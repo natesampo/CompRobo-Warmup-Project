@@ -26,7 +26,7 @@ def distanceTo(a, b):
     '''Calculate distance from point a to point b'''
     return math.sqrt((a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]))
 
-def input_thread(avoid_obst):
+def input_thread(finite_state):
     '''Seperate thread for user input, loops, checking for button input'''
     running = True
     while running:
@@ -38,13 +38,25 @@ def input_thread(avoid_obst):
             '''Kill the program and stop the robot'''
             running = False
             os.kill(os.getpid(), signal.SIGINT)
+        elif key == 'a':
+            '''Reset origin'''
+            finite_state.newOrigin()
 
-class avoid_obst(object):
+def mouseToPercent(mousePos):
+    '''Calculate percent of distance mouse is across the screen in both the x and y directions'''
+    return (mousePos[0]/(display.Display().screen().root.get_geometry().width/2), mousePos[1]/(display.Display().screen().root.get_geometry().height/2))
+
+def getCurrentMousePosition():
+    '''Grabs the current mouse position'''
+    return (display.Display().screen().root.query_pointer()._data['root_x'], display.Display().screen().root.query_pointer()._data['root_y'])
+
+class finite_state(object):
     def __init__ (self):
-        rospy.init_node("avoid_obst", disable_signals=True)
+        rospy.init_node("finite_state", disable_signals=True)
         self.scan_subscriber = rospy.Subscriber('scan', LaserScan, self.getScan)
         self.odom_sub = rospy.Subscriber('odom', Odometry, self.getOdom)
         self.velocityPublisher = rospy.Publisher('cmd_vel', Twist, queue_size=5)
+        self.mouseOrigin = (display.Display().screen().root.query_pointer()._data['root_x'], display.Display().screen().root.query_pointer()._data['root_y'])
         self.speed = 0.1
         self.rate = rospy.Rate(10)
         self.vel = Twist()
@@ -55,12 +67,24 @@ class avoid_obst(object):
         self.maxTrackDistance = 1
         self.totalForce = (0, 0)
         self.goal = (0, 0)
+        self.obstacle = False
+        self.objects = []
 
     def getOdom(self, msg):
         '''Receive and process odom messages, store them as self.pose'''
         self.pose = convert_pose_to_xy_and_theta(msg.pose.pose)
         if self.goal == (0, 0):
             self.goal = (self.pose[0], self.pose[1]-2)
+            self.newOrigin()
+            self.getNewOrigin = False
+
+    def newOrigin(self):
+        '''Reset the mouse origin on the screen'''
+        self.mouseOrigin = getCurrentMousePosition()
+
+    def getRelativeMousePosition(self, mousePos):
+        '''Get the current mouse position relative to the mouse origin'''
+        return (mousePos[0] - self.mouseOrigin[0], mousePos[1] - self.mouseOrigin[1])
 
     def getScan(self, msg):
         '''Receive and process scan messages, store them as self.scan'''
@@ -122,26 +146,39 @@ class avoid_obst(object):
             if len(self.scan) > 0:
                 theta = math.atan2(self.goal[1]-self.pose[1], self.goal[0]-self.pose[0])
                 self.totalForce = (distanceTo(self.goal, (self.pose[0], self.pose[1]))*math.cos(theta), distanceTo(self.goal, (self.pose[0], self.pose[1]))*math.sin(theta))
-                for angle in range(360):
+                for angle in range(90):
+                    prev = self.processScan(angle, prev)
+
+                prev = False
+
+                for angle in range(270, 360):
                     prev = self.processScan(angle, prev)
 
                 if len(self.objects) > 0:
                     self.processObjects()
+                else:
+                    self.obstacle = False
 
-                self.vel.linear.x = self.speed*self.convertToPolar(self.totalForce[0], self.totalForce[1])[0]/2
-                self.vel.angular.z = self.speed*self.convertToPolar(self.totalForce[0], self.totalForce[1])[1]*5
+                if self.obstacle:
+                    self.vel.linear.x = self.speed*self.convertToPolar(self.totalForce[0], self.totalForce[1])[0]/2
+                    self.vel.angular.z = self.speed*self.convertToPolar(self.totalForce[0], self.totalForce[1])[1]*5
+
+            if not self.obstacle:
+                mouseXY = mouseToPercent(self.getRelativeMousePosition(getCurrentMousePosition()))
+                self.vel.linear.x = -mouseXY[1]*self.speed
+                self.vel.angular.z = -mouseXY[0]*self.speed
 
             self.velocityPublisher.publish(self.vel)
 
 if __name__ == "__main__":
     settings = termios.tcgetattr(sys.stdin)
-    avoid_obst = avoid_obst()
+    finite_state = finite_state()
 
     #Start new thread for input so it is not on the same thread as the robot processing
-    thread.start_new_thread(input_thread, (avoid_obst, ))
+    thread.start_new_thread(input_thread, (finite_state, ))
     try:
-        avoid_obst.run()
+        finite_state.run()
     except KeyboardInterrupt:
-        avoid_obst.vel.linear.x = 0
-        avoid_obst.vel.angular.z = 0
-        avoid_obst.velocityPublisher.publish(avoid_obst.vel)
+        finite_state.vel.linear.x = 0
+        finite_state.vel.angular.z = 0
+        finite_state.velocityPublisher.publish(finite_state.vel)

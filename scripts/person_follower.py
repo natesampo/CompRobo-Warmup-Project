@@ -22,41 +22,20 @@ def convert_pose_to_xy_and_theta(pose):
     angles = euler_from_quaternion(orientation_tuple)
     return (pose.position.x, pose.position.y, angles[2])
 
-def angle_normalize(z):
-    """ convenience function to map an angle to the range [-pi,pi] """
-    return math.atan2(math.sin(z), math.cos(z))
-
-def angle_diff(a, b):
-    """ Calculates the difference between angle a and angle b (both should be in radians)
-        the difference is always based on the closest rotation from angle a to angle b
-        examples:
-            angle_diff(.1,.2) -> -.1
-            angle_diff(.1, 2*math.pi - .1) -> .2
-            angle_diff(.1, .2+2*math.pi) -> -.1
-    """
-    a = angle_normalize(a)
-    b = angle_normalize(b)
-    d1 = a-b
-    d2 = 2*math.pi - math.fabs(d1)
-    if d1 > 0:
-        d2 *= -1.0
-    if math.fabs(d1) < math.fabs(d2):
-        return d1
-    else:
-        return d2
-
 def distanceTo(a, b):
+    '''Calculate distance from point a to point b'''
     return math.sqrt((a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]))
 
 def input_thread(personFollower):
+    '''Seperate thread for user input, loops, checking for button input'''
     running = True
     while running:
-        '''Given code to grab keyboard values'''
         tty.setraw(sys.stdin.fileno())
         select.select([sys.stdin], [], [], 0)
         key = sys.stdin.read(1)
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
         if key == 'q':
+            '''Kill the program and stop the robot'''
             running = False
             os.kill(os.getpid(), signal.SIGINT)
 
@@ -76,15 +55,34 @@ class personFollower(object):
         self.minimumPersonPoints = 2
 
     def getOdom(self, msg):
+        '''Receive and process odom messages, store them as self.pose'''
         self.pose = convert_pose_to_xy_and_theta(msg.pose.pose)
 
     def getScan(self, msg):
+        '''Receive and process scan messages, store them as self.scan'''
         self.scan = msg.ranges
 
     def convertToXY(self, angle, r):
+        '''Given a polar coordinate, return the corresponding cartesian coordinate'''
         newX = math.cos(math.radians(angle))*r
         newY = math.sin(math.radians(angle))*r
         return (newX, newY)
+
+    def processScan(self, angle, prev):
+        '''Given an angle and whether or not the previous point was part of an object, create or add to an object and return if this point is part of an object'''
+        if self.scan[angle] > 0.0:
+            newPoint = self.convertToXY(angle, self.scan[angle])
+            if not prev or distanceTo(objects[-1][-1], newPoint) > self.maxPersonDistance:
+                objects.append([])
+                objects[-1].append((newPoint[0], newPoint[1], angle))
+                prev = True
+            else:
+                objects[-1].append((newPoint[0], newPoint[1], angle))
+                prev = True
+        else:
+            prev = False
+
+        return prev
 
     def run(self):
         while not rospy.is_shutdown():
@@ -95,17 +93,7 @@ class personFollower(object):
             closestPointDistance = 5
             if len(self.scan) > 0:
                 for angle in range(360):
-                    if self.scan[angle] > 0.0:
-                        newPoint = self.convertToXY(angle, self.scan[angle])
-                        if not prev or distanceTo(objects[-1][-1], newPoint) > self.maxPersonDistance:
-                            objects.append([])
-                            objects[-1].append((newPoint[0], newPoint[1], angle))
-                            prev = True
-                        else:
-                            objects[-1].append((newPoint[0], newPoint[1], angle))
-                            prev = True
-                    else:
-                        prev = False
+                    prev = self.processScan(angle, prev)
 
                 if distanceTo((objects[0][0][0], objects[0][0][1]), (objects[-1][-1][0], objects[-1][-1][1])) < self.maxPersonDistance:
                     objects[0] = objects[0] + objects[-1]
@@ -142,6 +130,8 @@ class personFollower(object):
 if __name__ == "__main__":
     settings = termios.tcgetattr(sys.stdin)
     personFollower = personFollower()
+
+    #Start new thread for input so it is not on the same thread as the robot processing
     thread.start_new_thread(input_thread, (personFollower, ))
     try:
         personFollower.run()
