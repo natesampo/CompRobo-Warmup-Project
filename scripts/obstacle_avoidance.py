@@ -60,32 +60,27 @@ def input_thread(avoid_obst):
             running = False
             os.kill(os.getpid(), signal.SIGINT)
 
-def pointToForce(point):
-    theta = math.atan2(point[1], point[0])
-    distance = math.sqrt((point[0])*(point[0]) + (point[1])*(point[1]))
-    return (-0.5*distance*math.cos(theta), -0.5*distance*math.sin(theta))
-
 class avoid_obst(object):
     def __init__ (self):
         rospy.init_node("avoid_obst", disable_signals=True)
         self.scan_subscriber = rospy.Subscriber('scan', LaserScan, self.getScan)
         self.odom_sub = rospy.Subscriber('odom', Odometry, self.getOdom)
         self.velocityPublisher = rospy.Publisher('cmd_vel', Twist, queue_size=5)
-        self.speed = 0.2
+        self.speed = 0.1
         self.rate = rospy.Rate(10)
         self.vel = Twist()
         self.pose = (0, 0, 0)
         self.scan = []
         self.minimumObjectPoints = 2
         self.maxObjectDistance = 0.2
-        self.maxTrackDistance = 1.5
+        self.maxTrackDistance = 1
         self.totalForce = (0, 0)
         self.goal = (0, 0)
 
     def getOdom(self, msg):
         self.pose = convert_pose_to_xy_and_theta(msg.pose.pose)
         if self.goal == (0, 0):
-            self.goal = (self.pose[0], 2+self.pose[1])
+            self.goal = (self.pose[0], self.pose[1]-2)
 
     def getScan(self, msg):
         self.scan = msg.ranges
@@ -95,9 +90,9 @@ class avoid_obst(object):
         newY = math.sin(math.radians(angle-90))*r
         return (newX, newY)
 
-    def convertToRadians(self, x, y):
+    def convertToPolar(self, x, y):
         r = math.sqrt(x*x + y*y)
-        theta = math.degrees(math.arctan2(y, x))-90
+        theta = math.atan2(y, x)+1.57
         return (r, theta)
 
     def run(self):
@@ -111,20 +106,7 @@ class avoid_obst(object):
             if len(self.scan) > 0:
                 theta = math.atan2(self.goal[1]-self.pose[1], self.goal[0]-self.pose[0])
                 self.totalForce = (distanceTo(self.goal, (self.pose[0], self.pose[1]))*math.cos(theta), distanceTo(self.goal, (self.pose[0], self.pose[1]))*math.sin(theta))
-                for angle in range(120):
-                    if self.scan[angle] > 0.0 and self.scan[angle] < self.maxTrackDistance:
-                        newPoint = self.convertToXY(angle, self.scan[angle])
-                        if not prev or distanceTo(objects[-1][-1], newPoint) > self.maxObjectDistance:
-                            objects.append([])
-                            objects[-1].append((newPoint[0], newPoint[1], angle))
-                            prev = True
-                        else:
-                            objects[-1].append((newPoint[0], newPoint[1], angle))
-                            prev = True
-                    else:
-                        prev = False
-
-                for angle in range(240, 360):
+                for angle in range(360):
                     if self.scan[angle] > 0.0 and self.scan[angle] < self.maxTrackDistance:
                         newPoint = self.convertToXY(angle, self.scan[angle])
                         if not prev or distanceTo(objects[-1][-1], newPoint) > self.maxObjectDistance:
@@ -152,14 +134,16 @@ class avoid_obst(object):
                             objects.remove(object)
 
                     for point in closestPoints:
-                        self.totalForce = (self.totalForce[0]+pointToForce(point)[0], self.totalForce[1]+pointToForce(point)[1])
+                        self.totalForce = (self.totalForce[0]-point[0], self.totalForce[1]-point[1]*10)
 
-                self.vel.linear.x = self.speed*math.sqrt(self.totalForce[0]*self.totalForce[0] + self.totalForce[1]*self.totalForce[1])/6
-                self.vel.angular.z = self.speed*(math.atan2(self.totalForce[1], self.totalForce[0]))/2
+                #self.vel.linear.x = self.speed*math.sqrt(self.totalForce[0]*self.totalForce[0] + self.totalForce[1]*self.totalForce[1])/6
+                #self.vel.angular.z = self.speed*(math.atan2(self.totalForce[1], self.totalForce[0]))/2
+                self.vel.linear.x = self.speed*self.convertToPolar(self.totalForce[0], self.totalForce[1])[0]/2
+                self.vel.angular.z = self.speed*self.convertToPolar(self.totalForce[0], self.totalForce[1])[1]*5
 
             a += 1
             if a%5000 == 0:
-                print self.convertToRadians()
+                print self.convertToPolar(self.totalForce[0], self.totalForce[1])
             self.velocityPublisher.publish(self.vel)
 
 if __name__ == "__main__":
